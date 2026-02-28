@@ -1,4 +1,5 @@
 from langchain_ollama import OllamaLLM
+import json
 
 llm = OllamaLLM(model="llama3")
 
@@ -19,3 +20,32 @@ Reply with only one word — QUESTION, BOOKING, or UNCLEAR:"""
     if "QUESTION" in result:
         return "question"
     return "unclear"
+
+def extract_booking_entities(message: str) -> dict:
+    prompt = f"""Extract booking details from this message and return ONLY a JSON object.
+If any field is missing or unclear, use null.
+
+Message: "{message}"
+
+Return exactly this JSON format:
+{{
+    "resource": "room or lab name or null",
+    "date": "YYYY-MM-DD format or null",
+    "time": "HH:MM AM/PM format or null",
+    "duration": "X hours or null"
+}}
+
+Return ONLY the JSON, no other text:"""
+
+    result = llm.invoke(prompt).strip()
+    
+    try:
+        result = result.replace("```json", "").replace("```", "").strip()
+        return json.loads(result)
+    except:
+        return {
+            "resource": None,
+            "date": None,
+            "time": None,
+            "duration": None
+        }

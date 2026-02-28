@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from bookings import router as bookings_router
 import shutil, os
 from rag import get_answer
-from intent import classify_intent
+from intent import classify_intent, extract_booking_entities
 from ingest import ingest_pdf
 
 app = FastAPI()
@@ -28,18 +28,27 @@ async def chat(req: ChatRequest):
     if intent == "unclear":
         return {
             "type": "unclear",
-            "content": "I can help you with department questions or room/lab bookings. Could you rephrase your message?"
+            "content": "Hi! I'm CSIS SmartAssist. I can answer questions about department policies or help you book a lab or room. How can I help?"
         }
 
     if intent == "booking":
+        entities = extract_booking_entities(req.message)
+        missing = [k for k, v in entities.items() if v is None]
+
+        if missing:
+            return {
+                "type": "clarification",
+                "content": f"I'd love to help you book! Could you also provide: {', '.join(missing)}?"
+            }
+
         return {
             "type": "booking",
-            "content": "I understand you'd like to book a resource. Here are the available options for that date.",
+            "content": "I found the following details for your booking:",
             "booking": {
-                "resource": "Meeting Room B",
-                "date": "2026-02-26",
-                "time": "2:00 PM",
-                "duration": "2 hours"
+                "resource": entities["resource"],
+                "date": entities["date"],
+                "time": entities["time"],
+                "duration": entities["duration"]
             }
         }
 
