@@ -8,6 +8,7 @@ from database import (
     create_announcement, get_announcements
 )
 from email_service import send_admin_approval_email, send_user_notification
+from calendar_services import check_availability, create_calendar_event
 
 router = APIRouter()
 
@@ -29,6 +30,16 @@ class AnnouncementCreate(BaseModel):
 
 @router.post("/bookings/confirm")
 def confirm_booking(req: BookingConfirm):
+    # Check calendar availability first
+    duration_hours = int(req.duration.split()[0]) if req.duration else 2
+    is_available = check_availability(req.resource, req.date, req.time, duration_hours)
+    
+    if not is_available:
+        return {
+            "status": "unavailable",
+            "message": f"{req.resource} is already booked on {req.date} at {req.time}. Please choose a different time."
+        }
+
     booking_id = create_booking(
         req.user_id, req.requester,
         req.resource, req.date, req.time, req.duration
@@ -50,7 +61,6 @@ def update_booking(booking_id: str, req: StatusUpdate):
     update_booking_status(booking_id, req.status, req.remarks)
     return {"success": True}
 
-# One-click approve/reject from email link
 @router.get("/bookings/{booking_id}/action")
 def action_booking(booking_id: str, status: str):
     booking = get_booking_by_id(booking_id)
@@ -58,6 +68,24 @@ def action_booking(booking_id: str, status: str):
         return HTMLResponse("<h2>Booking not found.</h2>")
 
     update_booking_status(booking_id, status)
+
+    # Create calendar event only on approval
+    if status == "approved":
+        try:
+            duration_hours = int(booking["duration"].split()[0]) if booking["duration"] else 2
+            event_id = create_calendar_event(
+                booking["resource"],
+                booking["requester"],
+                booking["date"],
+                booking["time"],
+                duration_hours
+            )
+            print(f"✅ Calendar event created: {event_id}")
+        except Exception as e:
+            print(f"❌ Calendar error: {e}")
+            import traceback
+            traceback.print_exc()
+
     send_user_notification(
         booking["user_id"], status,
         booking["resource"], booking["date"]

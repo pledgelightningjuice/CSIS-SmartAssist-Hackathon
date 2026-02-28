@@ -91,16 +91,3 @@ def create_calendar_event(resource: str, requester: str, date: str, time: str, d
         print(f"Calendar event creation error: {e}")
         return ""
     
-if __name__ == "__main__":
-    service = get_calendar_service()
-    print("Calendar connected!")
-    
-    # Test creating an event
-    event_id = create_calendar_event(
-        "Lab 3", "John Smith", "2026-02-28", "3:00 PM", 2
-    )
-    print("Event created with ID:", event_id)
-    
-    # Test checking availability
-    available = check_availability("Lab 3", "2026-02-28", "3:00 PM", 2)
-    print("Is available:", available)
