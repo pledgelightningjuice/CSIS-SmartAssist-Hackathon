@@ -1,10 +1,10 @@
 import os
 import datetime
+import pickle
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-import pickle
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -30,31 +30,44 @@ def get_calendar_service():
 def check_availability(resource: str, date: str, time: str, duration_hours: int = 2) -> bool:
     try:
         service = get_calendar_service()
-        
-        # Parse date and time
+        import pytz
+        IST = pytz.timezone("Asia/Kolkata")
+       
         dt_str = f"{date} {time}"
         try:
             dt_start = datetime.datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
         except:
-            dt_start = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
-        
+            try:
+                dt_start = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M %p")
+            except:
+                dt_start = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+       
+        dt_start = IST.localize(dt_start)
         dt_end = dt_start + datetime.timedelta(hours=duration_hours)
-        
-        # Check calendar for conflicts
+
+        # Get ALL events in that time window, not just resource-specific ones
         events_result = service.events().list(
             calendarId="primary",
-            timeMin=dt_start.isoformat() + "Z",
-            timeMax=dt_end.isoformat() + "Z",
+            timeMin=dt_start.isoformat(),
+            timeMax=dt_end.isoformat(),
             singleEvents=True,
-            orderBy="startTime",
-            q=resource  # search for resource name in events
+            orderBy="startTime"
         ).execute()
-        
+
         events = events_result.get("items", [])
-        return len(events) == 0  # True = available, False = conflict
+       
+        # Check if any event mentions this resource
+        for event in events:
+            summary = event.get("summary", "").lower()
+            if resource.lower() in summary:
+                print(f"Conflict found: {summary}")
+                return False  # Not available
+       
+        return True  # Available
+       
     except Exception as e:
         print(f"Calendar check error: {e}")
-        return True  # Default to available if calendar fails
+        return True  # Default to available if check fails
 
 def create_calendar_event(resource: str, requester: str, date: str, time: str, duration_hours: int = 2) -> str:
     try:
